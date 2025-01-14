@@ -1,61 +1,11 @@
 local fun = vim.fn
 local pre_display = require("godbolt.assembly")["pre-display"]
 local execute = require("godbolt.execute").execute
+
 local function transform(entry)
   return {value = vim.split(entry, " ")[1], display = entry, ordinal = entry}
 end
-local function fzf(entries, begin, _end, options, exec, reuse_3f)
-  local maxlen
-  do
-    local current_maxlen = -1
-    for _, v in pairs(entries) do
-      local len = fun.len(v)
-      if (len > current_maxlen) then
-        current_maxlen = len
-      else
-        current_maxlen = current_maxlen
-      end
-    end
-    maxlen = current_maxlen
-  end
-  local width = ((maxlen / vim.o.columns) + 0.05)
-  local function _2_(choice)
-    local compiler = vim.split(choice, " ")[1]
-    pre_display(begin, _end, compiler, options, reuse_3f)
-    if exec then
-      return execute(begin, _end, compiler, options)
-    else
-      return nil
-    end
-  end
-  return fun["fzf#run"]({source = entries, window = {width = width, height = 0.6}, sink = _2_})
-end
-local function skim(entries, begin, _end, options, exec, reuse_3f)
-  local maxlen
-  do
-    local current_maxlen = -1
-    for _, v in pairs(entries) do
-      local len = fun.len(v)
-      if (len > current_maxlen) then
-        current_maxlen = len
-      else
-        current_maxlen = current_maxlen
-      end
-    end
-    maxlen = current_maxlen
-  end
-  local width = ((maxlen / vim.o.columns) + 0.05)
-  local function _5_(choice)
-    local compiler = vim.split(choice, " ")[1]
-    pre_display(begin, _end, compiler, options, reuse_3f)
-    if exec then
-      return execute(begin, _end, compiler, options)
-    else
-      return nil
-    end
-  end
-  return fun["skim#run"]({source = entries, window = {width = width, height = 0.6}, sink = _5_})
-end
+
 local function telescope(entries, begin, _end, options, exec, reuse_3f)
   local pickers = require("telescope.pickers")
   local finders = require("telescope.finders")
@@ -78,9 +28,9 @@ local function telescope(entries, begin, _end, options, exec, reuse_3f)
   return pickers.new({}, {prompt_title = "Choose compiler", finder = finders.new_table({results = entries, entry_maker = transform}), sorter = conf.generic_sorter(nil), attach_mappings = _7_}):find()
 end
 local function fzf_lua(entries, begin, _end, options, exec, reuse_3f)
-  local callback = function(action)
-    Snacks.debug.info(action)
-    pre_display(begin, _end, actions[selected[1]], options, reuse_3f)
+  local callback = function(selected)
+    local compiler = vim.split(selected[1], " ")[1]
+    pre_display(begin, _end, compiler, options, reuse_3f)
     if exec then
       return execute(begin, _end, compiler, options)
     else
@@ -90,21 +40,6 @@ local function fzf_lua(entries, begin, _end, options, exec, reuse_3f)
   require("godbolt.fzflua").pick(callback, entries)
 end
 
-local function fzy(entries, begin, _end, options, exec, reuse_3f)
-  local function _10_(text)
-    return text
-  end
-  local function _11_(choice)
-    local compiler = vim.split(choice, " ")[1]
-    pre_display(begin, _end, compiler, options, reuse_3f)
-    if exec then
-      return execute(begin, _end, compiler, options)
-    else
-      return nil
-    end
-  end
-  return require("fzy").pick_one(entries, "Choose compiler: ", _10_, _11_)
-end
 local function fuzzy(picker, ft, begin, _end, options, exec, reuse_3f)
   local ft0
   if (ft == "cpp") then
@@ -142,15 +77,8 @@ local function fuzzy(picker, ft, begin, _end, options, exec, reuse_3f)
       entries = tbl_21_auto
     end
     local _18_
-    if (picker == "fzf") then
-      _18_ = fzf
-    elseif (picker == "skim") then
-      _18_ = skim
-    elseif (picker == "telescope") then
-      Snacks.notify.info("hello")
+    if (picker == "telescope") then
       _18_ = telescope
-    elseif (picker == "fzy") then
-      _18_ = fzy
     elseif (picker == "fzflua") then
       _18_ = fzf_lua
     else
