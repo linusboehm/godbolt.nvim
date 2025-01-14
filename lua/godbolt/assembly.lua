@@ -1,3 +1,5 @@
+-- M = {}
+local tmer
 local api = vim["api"]
 local cmd = vim["cmd"]
 local fun = vim.fn
@@ -7,6 +9,7 @@ local wo_set = api.nvim_win_set_option
 local map = {}
 local nsid_static = vim.api.nvim_create_namespace("godbolt_highlight")
 local nsid = vim.api.nvim_create_namespace("godbolt_cursor")
+
 local function get_highlight(field)
   local highlight = require("godbolt").config.highlight
   if (type(highlight) == "table") then
@@ -41,13 +44,21 @@ local function get_highlight_groups(highlights)
   end
   return tbl_21_auto
 end
-local function prepare_buf(text, name, reuse_3f, source_buf)
-  local buf
-  if (reuse_3f and ("table" == type(map[source_buf]))) then
-    buf = table.maxn(map[source_buf])
-  else
-    buf = api.nvim_create_buf(false, true)
+---@param opts? table
+local function prepare_buf(text, name, reuse_3f, source_buf, opts)
+  opts = opts or {}
+  opts.buf = opts.buf or -1
+  -- if opts.win.buf == -1 then
+  --   opts.win.buf = buffer_exists_with("snacks_win", "nofile")
+  -- end
+  if opts.buf == -1 then
+    if reuse_3f and ("table" == type(map[source_buf])) then
+      opts.buf = table.maxn(map[source_buf])
+    else
+      opts.buf = api.nvim_create_buf(false, true)
+    end
   end
+  local buf = opts.buf
   vim.bo[buf]["modifiable"] = true
   api.nvim_buf_set_lines(buf, 0, -1, true, vim.split(text, "\n", {trimempty = true}))
   api.nvim_buf_set_name(buf, name)
@@ -213,19 +224,17 @@ local function setup_aucmd(source_buf, asm_buf)
       return remove_source(source_buf)
     end
     api.nvim_create_autocmd({"BufUnload"}, {group = group, callback = _24_, buffer = source_buf})
-  else
   end
   if cursor then
     local function _26_()
       return update_asm(source_buf, asm_buf)
     end
     api.nvim_create_autocmd({"CursorMoved", "BufEnter"}, {group = group, callback = _26_, buffer = asm_buf})
-  else
   end
   local function _28_()
     return clear_asm(source_buf, asm_buf)
   end
-  return api.nvim_create_autocmd({"BufUnload"}, {group = group, callback = _28_, buffer = asm_buf})
+  return api.nvim_create_autocmd({"BufUnload", "BufHidden"}, {group = group, callback = _28_, buffer = asm_buf})
 end
 local function make_qflist(err, bufnr)
   if next(err) then
@@ -253,7 +262,8 @@ local function make_qflist(err, bufnr)
     return nil
   end
 end
-local function display(response, begin, name, reuse_3f)
+---@param opts? table
+local function display(response, begin, name, reuse_3f, opts)
   local asm
   if vim.tbl_isempty(response.asm) then
     asm = fmt("No assembly to display (~%d lines filtered)", response.filteredCount)
@@ -272,7 +282,7 @@ local function display(response, begin, name, reuse_3f)
   local source_winid = fun.win_getid()
   local source_buf = fun.bufnr()
   local qflist = make_qflist(response.stderr, source_buf)
-  local asm_buf = prepare_buf(asm, name, reuse_3f, source_buf)
+  local asm_buf = prepare_buf(asm, name, reuse_3f, source_buf, opts)
   local qf_winid = nil
   if (qflist and config.quickfix.enable) then
     fun.setqflist(qflist)
@@ -287,13 +297,20 @@ local function display(response, begin, name, reuse_3f)
     return vim.notify("godbolt.nvim: Compilation failed")
   else
     api.nvim_set_current_win(source_winid)
-    local asm_winid
-    if (reuse_3f and map[source_buf]) then
-      asm_winid = map[source_buf][asm_buf].winid
-    else
-      cmd("vsplit")
-      asm_winid = api.nvim_get_current_win()
+    opts = opts or {}
+    opts.win = opts.win or -1
+    -- if opts.win.nr == -1 then
+    --   opts.win.nr = get_window_id_for_buffer(asm_buf)
+    -- end
+    if opts.win == -1 then
+      if reuse_3f and map[source_buf] then
+        opts.win = map[source_buf][asm_buf].winid
+      else
+        cmd("vsplit")
+        opts.win = api.nvim_get_current_win()
+      end
     end
+    local asm_winid = opts.win
     api.nvim_set_current_win(asm_winid)
     api.nvim_win_set_buf(asm_winid, asm_buf)
     wo_set(asm_winid, "number", false)
@@ -313,7 +330,6 @@ local function display(response, begin, name, reuse_3f)
     if not vim.tbl_isempty(response.asm) then
       if get_highlight("static") then
         init_highlight(source_buf, asm_buf)
-      else
       end
       return setup_aucmd(source_buf, asm_buf)
     else
@@ -321,7 +337,28 @@ local function display(response, begin, name, reuse_3f)
     end
   end
 end
-local function pre_display(begin, _end, compiler, options, reuse_3f)
+
+local function start_spinner(text)
+  local frames = { "⣼", "⣹", "⢻", "⠿", "⡟", "⣏", "⣧", "⣶" }
+  local interval = 100
+
+  local i = 1
+  timer = (vim.uv or vim.loop).new_timer()
+  timer:start(0, interval, function()
+    i = (i == #frames) and 1 or (i + 1)
+    local msg = text .. " " .. frames[i]
+    vim.schedule(function() api.nvim_echo({ { msg, "None" } }, false, {}) end)
+  end)
+end
+
+local function stop_spinner()
+  api.nvim_echo({ { "", "None" } }, false, {})
+  timer:stop()
+  timer:close()
+end
+
+---@param opts? table
+local function pre_display(begin, _end, compiler, options, reuse_3f, opts)
   local lines = api.nvim_buf_get_lines(0, (begin - 1), _end, true)
   local text = fun.join(lines, "\n")
   local curl_cmd = require("godbolt.cmd")["build-cmd"](compiler, text, options, "asm")
@@ -330,13 +367,15 @@ local function pre_display(begin, _end, compiler, options, reuse_3f)
   local min = time.min
   local sec = time.sec
   local function _42_(_, _0, _1)
+    stop_spinner()
     local file = io.open("godbolt_response_asm.json", "r")
     local response = file:read("*all")
     file:close()
     os.remove("godbolt_request_asm.json")
     os.remove("godbolt_response_asm.json")
-    return display(vim.json.decode(response), begin, fmt("%s %02d:%02d:%02d", compiler, hour, min, sec), reuse_3f)
+    return display(vim.json.decode(response), begin, fmt("%s %02d:%02d:%02d", compiler, hour, min, sec), reuse_3f, opts)
   end
+  start_spinner("compiling")
   return fun.jobstart(curl_cmd, {on_exit = _42_})
 end
 return {["pre-display"] = pre_display}

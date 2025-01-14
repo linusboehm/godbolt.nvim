@@ -2,23 +2,28 @@ local fun = vim.fn
 local api = vim.api
 local wo_set = api.nvim_win_set_option
 local exec_buf_map = {}
-local function prepare_buf(lines, source_buf, reuse_3f)
+local function prepare_buf(lines, source_buf, reuse_3f, opts)
   local time = os.date("*t")
   local hour = time.hour
   local min = time.min
   local sec = time.sec
-  local buf
-  if (reuse_3f and exec_buf_map[source_buf]) then
-    buf = exec_buf_map[source_buf]
-  else
-    buf = api.nvim_create_buf(false, true)
+  opts = opts or {}
+  opts.buf = opts.buf or -1
+  if opts.buf == -1 then
+    if (reuse_3f and exec_buf_map[source_buf]) then
+      opts.buf = exec_buf_map[source_buf]
+    else
+      opts.buf = api.nvim_create_buf(false, true)
+    end
   end
+  local buf = opts.buf
   exec_buf_map[source_buf] = buf
   api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   api.nvim_buf_set_name(buf, string.format("%02d:%02d:%02d", hour, min, sec))
   return buf
 end
-local function display_output(response, source_buf, reuse_3f)
+---@param opts? table
+local function display_output(response, source_buf, reuse_3f, opts)
   local stderr
   do
     local tbl_21_auto = {}
@@ -53,20 +58,24 @@ local function display_output(response, source_buf, reuse_3f)
   table.insert(lines, "stderr:")
   vim.list_extend(lines, stderr)
   local exists = (nil ~= exec_buf_map[source_buf])
-  local output_buf = prepare_buf(lines, source_buf, reuse_3f)
-  local old_winid = fun.win_getid()
-  if not (reuse_3f and exists) then
-    vim.cmd("split")
-    vim.cmd(("buffer " .. output_buf))
-    wo_set(0, "number", false)
-    wo_set(0, "relativenumber", false)
-    wo_set(0, "spell", false)
-    wo_set(0, "cursorline", false)
-  else
+  local output_buf = prepare_buf(lines, source_buf, reuse_3f, opts)
+  local old_win = fun.win_getid()
+  opts = opts or {}
+  opts.win = opts.win or -1
+  if opts.win == -1 then
+    if not (reuse_3f and exists) then
+      vim.cmd("split")
+      vim.cmd(("buffer " .. output_buf))
+      wo_set(0, "number", false)
+      wo_set(0, "relativenumber", false)
+      wo_set(0, "spell", false)
+      wo_set(0, "cursorline", false)
+    end
   end
-  return api.nvim_set_current_win(old_winid)
+  return api.nvim_set_current_win(old_win)
 end
-local function execute(begin, _end, compiler, options, reuse_3f)
+---@param opts? table
+local function execute(begin, _end, compiler, options, reuse_3f, opts)
   local lines = api.nvim_buf_get_lines(0, (begin - 1), _end, true)
   local text = fun.join(lines, "\n")
   local source_buf = fun.bufnr()
@@ -78,7 +87,7 @@ local function execute(begin, _end, compiler, options, reuse_3f)
     file:close()
     os.remove("godbolt_request_exec.json")
     os.remove("godbolt_response_exec.json")
-    return display_output(vim.json.decode(response), source_buf, reuse_3f)
+    return display_output(vim.json.decode(response), source_buf, reuse_3f, opts)
   end
   return fun.jobstart(cmd, {on_exit = _5_})
 end

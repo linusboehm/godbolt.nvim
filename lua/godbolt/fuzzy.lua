@@ -77,6 +77,19 @@ local function telescope(entries, begin, _end, options, exec, reuse_3f)
   end
   return pickers.new({}, {prompt_title = "Choose compiler", finder = finders.new_table({results = entries, entry_maker = transform}), sorter = conf.generic_sorter(nil), attach_mappings = _7_}):find()
 end
+local function fzf_lua(entries, begin, _end, options, exec, reuse_3f)
+  local callback = function(action)
+    Snacks.debug.info(action)
+    pre_display(begin, _end, actions[selected[1]], options, reuse_3f)
+    if exec then
+      return execute(begin, _end, compiler, options)
+    else
+      return nil
+    end
+  end
+  require("godbolt.fzflua").pick(callback, entries)
+end
+
 local function fzy(entries, begin, _end, options, exec, reuse_3f)
   local function _10_(text)
     return text
@@ -134,9 +147,12 @@ local function fuzzy(picker, ft, begin, _end, options, exec, reuse_3f)
     elseif (picker == "skim") then
       _18_ = skim
     elseif (picker == "telescope") then
+      Snacks.notify.info("hello")
       _18_ = telescope
     elseif (picker == "fzy") then
       _18_ = fzy
+    elseif (picker == "fzflua") then
+      _18_ = fzf_lua
     else
       _18_ = nil
     end
