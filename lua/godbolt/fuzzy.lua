@@ -40,6 +40,21 @@ local function fzf_lua(entries, begin, _end, options, exec, reuse_3f)
   require("godbolt.fzflua").pick(callback, entries)
 end
 
+local function snacks_picker(entries, begin, _end, options, exec, reuse_3f)
+  local win = vim.api.nvim_get_current_win()
+  local callback = function(selected)
+    vim.api.nvim_set_current_win(win)
+    local compiler = vim.split(entries[selected], " ")[1]
+    pre_display(begin, _end, compiler, options, reuse_3f)
+    if exec then
+      return execute(begin, _end, compiler, options)
+    else
+      return nil
+    end
+  end
+  require("godbolt.snacks_picker").pick(callback, entries)
+end
+
 local function fuzzy(picker, ft, begin, _end, options, exec, reuse_3f)
   local ft0
   if (ft == "cpp") then
@@ -81,6 +96,8 @@ local function fuzzy(picker, ft, begin, _end, options, exec, reuse_3f)
       _18_ = telescope
     elseif (picker == "fzflua") then
       _18_ = fzf_lua
+    elseif (picker == "snacks_picker") then
+      _18_ = snacks_picker
     else
       _18_ = nil
     end

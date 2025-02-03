@@ -1,5 +1,5 @@
 local function complete(_, _0, _1)
-  return {"telescope", "fzflua"}
+  return {"telescope", "fzflua", "snacks_picker"}
 end
 local function _1_(opts)
   return require("godbolt.cmd").godbolt(opts.line1, opts.line2, opts.bang)
