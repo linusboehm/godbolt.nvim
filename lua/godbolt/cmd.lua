@@ -23,7 +23,7 @@ local function godbolt(begin, _end, reuse_3f, compiler, opts)
   else
     options = {}
   end
-  local flags = vim.fn.input({prompt = "Flags: ", default = (options.userArguments or "")})
+  local flags = opts.flags or vim.fn.input({prompt = "Flags: ", default = (options.userArguments or "")})
   options["userArguments"] = flags
   local fuzzy_3f
   do
